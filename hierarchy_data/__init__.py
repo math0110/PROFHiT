@@ -169,3 +169,6 @@ def unnormalize_data(dataset):
         if len(node.children) > 0:
             dataset.data[node.idx, :] *= len(node.children)
     return dataset
+
+
+from hierarchy_data.hf_grouped import GroupedHierarchyData

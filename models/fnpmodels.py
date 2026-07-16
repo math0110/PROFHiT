@@ -1014,26 +1014,28 @@ class RegressionSepFNP(nn.Module):
         # p(y|z) or p(y|z, u)
         # TODO: Add for sR input
         self.atten_ref = SelfAttention(self.dim_x)
-        self.output_params = [
-            nn.Parameter(
-                torch.randn(
-                    self.nodes,
-                    self.dim_z + self.dim_x
-                    if not self.use_plus
-                    else self.dim_z + self.dim_u + self.dim_x,
-                    self.dim_h,
-                ).to(device)
-                / math.sqrt(self.dim_h)
-            ),
-            nn.Parameter(
-                torch.randn(self.nodes, self.dim_h, self.dim_h).to(device)
-                / math.sqrt(self.dim_h)
-            ),
-            nn.Parameter(
-                torch.randn(self.nodes, self.dim_h, 2 * dim_y).to(device)
-                / math.sqrt(self.dim_h)
-            ),
-        ]
+        self.output_params = nn.ParameterList(
+            [
+                nn.Parameter(
+                    torch.randn(
+                        self.nodes,
+                        self.dim_z + self.dim_x
+                        if not self.use_plus
+                        else self.dim_z + self.dim_u + self.dim_x,
+                        self.dim_h,
+                    ).to(device)
+                    / math.sqrt(self.dim_h)
+                ),
+                nn.Parameter(
+                    torch.randn(self.nodes, self.dim_h, self.dim_h).to(device)
+                    / math.sqrt(self.dim_h)
+                ),
+                nn.Parameter(
+                    torch.randn(self.nodes, self.dim_h, 2 * dim_y).to(device)
+                    / math.sqrt(self.dim_h)
+                ),
+            ]
+        )
         if self.add_atten:
             self.atten_layer = LatentAtten(self.dim_h)
 

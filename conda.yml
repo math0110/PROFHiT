@@ -18,6 +18,7 @@ dependencies:
   - pip:
     - epiweeks
     - properscoring
+    - huggingface_hub
 # For development
   - ipykernel
   - jupyter
