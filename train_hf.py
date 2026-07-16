@@ -16,11 +16,19 @@ import time
 from pathlib import Path
 
 import numpy as np
-import properscoring as ps
 import torch as th
 from tqdm import tqdm
 
 from hierarchy_data.hf_grouped import AVAILABLE_DATASETS, GroupedHierarchyData
+from metrics import (
+    calibration_score,
+    crps_gaussian,
+    distributional_consistency_error,
+    log_score,
+    mape as mape_metric,
+    rmse as rmse_metric,
+    wape as wape_metric,
+)
 from models.fnpmodels import Corem, EmbedMetaAttenSeq, RegressionSepFNP
 from models.utils import float_tensor, long_tensor
 from utils import lag_dataset
@@ -256,21 +264,35 @@ def run_one_seed(args, data_obj, seed):
         )
     preds = preds * train_std[:, None] + train_means[:, None]  # (S, N, ahead)
     mean_preds = np.mean(preds, axis=0)  # (N, ahead)
+    std_preds = np.std(preds, axis=0)  # (N, ahead), fitted Gaussian std per node/step
 
     ground_truth = data_obj.ground_truth_horizon  # (N, ahead)
-    rmse = float(np.sqrt(np.mean((ground_truth - mean_preds) ** 2)))
-    mape = float(
-        np.mean(np.abs((ground_truth - mean_preds) / np.where(ground_truth == 0, 1e-6, ground_truth)))
-    )
-    crps = float(
-        ps.crps_ensemble(ground_truth, np.moveaxis(preds, [1, 2, 0], [0, 1, 2])).mean()
+
+    rmse = rmse_metric(ground_truth, mean_preds)
+    mape = mape_metric(ground_truth, mean_preds)
+    wape = wape_metric(ground_truth, mean_preds)
+    crps = crps_gaussian(ground_truth, mean_preds, std_preds)
+    ls = log_score(ground_truth, mean_preds, std_preds)
+    cs = calibration_score(ground_truth, mean_preds, std_preds)
+
+    # DCE is evaluated on a single per-node summary (mean over the horizon)
+    # against the static hmatrices, since the hierarchy structure doesn't
+    # change across forecast steps.
+    hmatrices_np = data_obj.generate_hmatrices()
+    dce_overall, dce_per_group = distributional_consistency_error(
+        mean_preds.mean(axis=1), std_preds.mean(axis=1), hmatrices_np
     )
 
     return {
         "seed": seed,
         "rmse": rmse,
         "mape": mape,
+        "wape": wape,
         "crps": crps,
+        "log_score": ls,
+        "calibration_score": cs,
+        "dce": dce_overall,
+        "dce_per_group": dce_per_group,
         "num_nodes": num_nodes,
         "backup_time": backup_time,
     }
@@ -289,7 +311,11 @@ def main():
         t0 = time.time()
         res = run_one_seed(args, data_obj, seed)
         res["elapsed_sec"] = time.time() - t0
-        print(f"[{args.dataset}] seed={seed} -> RMSE={res['rmse']:.4f} MAPE={res['mape']:.4f} CRPS={res['crps']:.4f} ({res['elapsed_sec']:.1f}s)")
+        print(
+            f"[{args.dataset}] seed={seed} -> RMSE={res['rmse']:.4f} MAPE={res['mape']:.4f} "
+            f"WAPE={res['wape']:.4f} CRPS={res['crps']:.4f} LS={res['log_score']:.4f} "
+            f"CS={res['calibration_score']:.4f} DCE={res['dce']:.4f} ({res['elapsed_sec']:.1f}s)"
+        )
         results.append(res)
 
     out_dir = Path(args.out_dir)
