@@ -185,7 +185,16 @@ def distributional_consistency_error(mu, sigma, hmatrices, eps=1e-6):
         m = np.asarray(m, dtype=np.float64)
         row_sum = m.sum(axis=1)
         is_leaf_or_inert = (np.diag(m) == 1) & (row_sum == 1)
-        parent_idx = np.where(~is_leaf_or_inert)[0]
+        # a node can also be entirely absent from a *partial* hierarchy
+        # (tourismlarge's geography/purpose hierarchies each cover only a
+        # subset of nodes -- see hierarchy_data/tags_csv.py's compute_levels
+        # docstring), giving an all-zero row rather than a self-identity
+        # one. Without excluding these too, agg_var gets clipped to the eps
+        # floor and the JSD ratio explodes -- this is what caused
+        # tourismlarge's DCE to come back in the hundreds of millions.
+        is_absent = row_sum == 0
+        not_scored = is_leaf_or_inert | is_absent
+        parent_idx = np.where(~not_scored)[0]
         if len(parent_idx) == 0:
             continue
 
