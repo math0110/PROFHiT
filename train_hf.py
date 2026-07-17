@@ -272,7 +272,7 @@ def run_one_seed(args, data_obj, seed):
     mape = mape_metric(ground_truth, mean_preds)
     wape = wape_metric(ground_truth, mean_preds)
     crps = crps_gaussian(ground_truth, mean_preds, std_preds)
-    ls = log_score(ground_truth, mean_preds, std_preds)
+    ls = log_score(ground_truth, mean_preds, std_preds, node_scale=train_std[:, None])
     cs = calibration_score(ground_truth, mean_preds, std_preds)
 
     # DCE is evaluated on a single per-node summary (mean over the horizon)

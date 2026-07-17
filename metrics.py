@@ -12,10 +12,14 @@ Notes on two definitions that are underspecified/ambiguous in the paper text:
 - Log Score (LS): the paper defines it as the negative integral of the log
   *density* (not the log of the integral of the density) over a fixed-width
   window [y-L, y+L] around the ground truth. L is never given a concrete
-  value in the main text. Here L defaults to a small fraction of each
-  node's ground-truth scale (data-driven) rather than a fixed constant,
-  since the 4 HF datasets span wildly different magnitudes (tens for
-  prison vs thousands for m5/police); pass `window` explicitly to override.
+  value in the main text, and computing it in raw units turns out to be a
+  units-mismatch trap: the -log(sigma) term scales with a node's absolute
+  magnitude, so within one hierarchy a large node (e.g. prison's Total,
+  ~37,000) dominates the average versus small ones (leaves as low as 6)
+  regardless of relative calibration quality. Here LS is computed in each
+  node's own normalized (z-scored) units instead -- see `log_score`'s
+  docstring for the full reasoning -- with `window` a fixed 0.005 (0.5% of
+  one std) in that normalized space.
 
 - Distributional Consistency Error (DCE, Eq. 7): as literally written, the
   paper's formula sums a per-node JSD-derived term over all non-leaf nodes
@@ -91,23 +95,48 @@ def crps_gaussian(y_true, mu, sigma, eps=1e-6):
     return float(np.mean(crps))
 
 
-def log_score(y_true, mu, sigma, window=None, cap=10.0, eps=1e-6):
+def log_score(y_true, mu, sigma, node_scale=None, window=0.005, cap=10.0, eps=1e-6):
     """Eq. in Section 5.1: LS = -integral_{y-L}^{y+L} log p_y(y_hat) d y_hat,
     for Gaussian p_y(mu, sigma), evaluated in closed form. `cap` mirrors the
     paper's note (following Reich et al.) that per-point log-likelihood is
     floored at -10 -- implemented here as an upper bound on the resulting
     (already negated) LS value, so a single degenerate prediction can't
-    dominate the average."""
+    dominate the average.
+
+    Computed in each node's own normalized (z-scored) units, not raw ones.
+    A first attempt at this used an absolute window sized off |y_true| --
+    but the -log(sigma) normalizing term in a Gaussian's log-density scales
+    with a node's *absolute* magnitude, so any window wide enough to be
+    meaningful for a large node (e.g. prison's Total, ~37,000) dominates
+    the average versus small nodes (leaves as low as 6) regardless of how
+    well-calibrated either actually is -- an inherent units mismatch, not
+    something a smarter constant can fix. Dividing y_true/mu/sigma by each
+    node's own characteristic scale before integrating puts every node on
+    the same footing (a Gaussian(mu, sigma) divided by a positive constant
+    s is still Gaussian(mu/s, sigma/s)), so `window` (default 0.005, i.e.
+    0.5% of one std) is uniformly meaningful regardless of a node's raw
+    magnitude.
+
+    `node_scale`: array broadcastable to y_true's shape giving each node's
+    characteristic scale (e.g. the per-node std used to normalize the
+    model's own training data -- the units it was actually calibrated in).
+    Defaults to the std of y_true itself if not provided.
+    """
     y_true = np.asarray(y_true, dtype=np.float64)
     mu = np.asarray(mu, dtype=np.float64)
     sigma = np.clip(np.asarray(sigma, dtype=np.float64), eps, None)
-    if window is None:
-        scale = np.maximum(np.abs(y_true).mean(), eps)
-        window = 0.005 * scale
-    a = y_true - window - mu
-    b = y_true + window - mu
-    log_norm_const = np.log(sigma) + 0.5 * np.log(2 * np.pi)
-    cubic_term = (b ** 3 - a ** 3) / (6 * sigma ** 2)
+    if node_scale is None:
+        node_scale = np.maximum(np.std(y_true), eps)
+    node_scale = np.clip(np.asarray(node_scale, dtype=np.float64), eps, None)
+
+    y_n = y_true / node_scale
+    mu_n = mu / node_scale
+    sigma_n = np.clip(sigma / node_scale, eps, None)
+
+    a = y_n - window - mu_n
+    b = y_n + window - mu_n
+    log_norm_const = np.log(sigma_n) + 0.5 * np.log(2 * np.pi)
+    cubic_term = (b ** 3 - a ** 3) / (6 * sigma_n ** 2)
     ls = log_norm_const * (2 * window) + cubic_term
     ls = np.minimum(ls, cap)
     return float(np.mean(ls))
