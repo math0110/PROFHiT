@@ -295,9 +295,16 @@ def run_one_seed(args, name, data_obj, hmatrices_np, levels_by_hierarchy, cfg, s
 
     overall_and_levels = {}
     for hier_name, levels in levels_by_hierarchy.items():
-        level_arr = np.array([levels[i] for i in range(num_nodes)])
+        # A hierarchy's own node list may only be a partial subset of all
+        # nodes (tourismlarge's geography/purpose hierarchies each exclude
+        # nodes that belong to the other), so score only the nodes that are
+        # actually part of *this* hierarchy rather than assuming every node
+        # index has a level everywhere.
+        idxs = np.array(sorted(levels.keys()))
+        level_arr = np.array([levels[i] for i in idxs])
         overall_and_levels[hier_name] = per_level_metrics(
-            ground_truth, mean_preds, std_preds, level_arr, node_scale=train_std[:, None]
+            ground_truth[idxs], mean_preds[idxs], std_preds[idxs], level_arr,
+            node_scale=train_std[idxs, None],
         )
 
     dce_overall, dce_per_hierarchy = distributional_consistency_error(
