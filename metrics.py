@@ -202,3 +202,45 @@ def distributional_consistency_error(mu, sigma, hmatrices, eps=1e-6):
 
     overall = float(np.mean(list(per_group.values()))) if per_group else 0.0
     return overall, per_group
+
+
+def compute_all_metrics(y_true, mu, sigma, node_scale=None):
+    """Convenience bundle of every accuracy/calibration metric (excludes
+    DCE, which needs the full hmatrix rather than a node subset -- compute
+    that separately over all nodes, not per level, since consistency is a
+    property of a node's relation to its children, not something a level
+    subset alone can measure)."""
+    return {
+        "rmse": rmse(y_true, mu),
+        "mape": mape(y_true, mu),
+        "wape": wape(y_true, mu),
+        "crps": crps_gaussian(y_true, mu, sigma),
+        "log_score": log_score(y_true, mu, sigma, node_scale=node_scale),
+        "calibration_score": calibration_score(y_true, mu, sigma),
+    }
+
+
+def per_level_metrics(y_true, mu, sigma, level_of_node, node_scale=None):
+    """Breaks out every metric in `compute_all_metrics` by hierarchy level,
+    plus an 'overall' entry across all nodes -- matching the paper's
+    Table 6/7 style per-level breakdown (root = level 1).
+
+    y_true, mu, sigma, node_scale: (N, T) or (N,) arrays, N = number of
+        nodes.
+    level_of_node: (N,) array/list giving each node's hierarchy depth.
+
+    Returns dict["overall" | "level_<k>" -> metrics dict].
+    """
+    y_true = np.asarray(y_true)
+    mu = np.asarray(mu)
+    sigma = np.asarray(sigma)
+    level_of_node = np.asarray(level_of_node)
+    if node_scale is not None:
+        node_scale = np.asarray(node_scale)
+
+    results = {"overall": compute_all_metrics(y_true, mu, sigma, node_scale)}
+    for lvl in sorted(set(level_of_node.tolist())):
+        mask = level_of_node == lvl
+        ns = node_scale[mask] if node_scale is not None else None
+        results[f"level_{lvl}"] = compute_all_metrics(y_true[mask], mu[mask], sigma[mask], ns)
+    return results
