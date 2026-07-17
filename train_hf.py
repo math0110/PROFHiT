@@ -73,6 +73,9 @@ def jsd_norm(mu1, mu2, var1, var2):
     return t1 + t2 - 1.0
 
 
+JSD_VAR_EPS = 1e-4  # floor on variance terms before they're divided by in jsd_norm
+
+
 def jsd_loss(mu, logstd, hmatrix, train_means, train_std):
     lhs_mu = (((mu * train_std + train_means) * hmatrix).sum(1) - train_means) / (
         train_std
@@ -80,7 +83,9 @@ def jsd_loss(mu, logstd, hmatrix, train_means, train_std):
     lhs_var = (((th.exp(2.0 * logstd) * (train_std ** 2)) * hmatrix).sum(1)) / (
         train_std ** 2
     )
-    ans = th.nan_to_num(jsd_norm(mu, lhs_mu, (2.0 * logstd).exp(), lhs_var))
+    lhs_var = th.clamp(lhs_var, min=JSD_VAR_EPS)
+    own_var = th.clamp((2.0 * logstd).exp(), min=JSD_VAR_EPS)
+    ans = th.nan_to_num(jsd_norm(mu, lhs_mu, own_var, lhs_var))
     return ans.mean()
 
 

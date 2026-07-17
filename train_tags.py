@@ -112,10 +112,15 @@ def jsd_norm(mu1, mu2, var1, var2):
     return t1 + t2 - 1.0
 
 
+JSD_VAR_EPS = 1e-4  # floor on variance terms before they're divided by in jsd_norm
+
+
 def jsd_loss(mu, logstd, hmatrix, train_means, train_std):
     lhs_mu = (((mu * train_std + train_means) * hmatrix).sum(1) - train_means) / (train_std)
     lhs_var = (((th.exp(2.0 * logstd) * (train_std ** 2)) * hmatrix).sum(1)) / (train_std ** 2)
-    ans = th.nan_to_num(jsd_norm(mu, lhs_mu, (2.0 * logstd).exp(), lhs_var))
+    lhs_var = th.clamp(lhs_var, min=JSD_VAR_EPS)
+    own_var = th.clamp((2.0 * logstd).exp(), min=JSD_VAR_EPS)
+    ans = th.nan_to_num(jsd_norm(mu, lhs_mu, own_var, lhs_var))
     return ans.mean()
 
 
@@ -196,9 +201,8 @@ def run_one_seed(args, name, data_obj, hmatrices_np, levels_by_hierarchy, cfg, s
         tqdm.write(f"  pretrain epoch {ep}: loss={loss:.4f} val_loss={val_loss:.4f}")
 
     corem = Corem(nodes=num_nodes, c=args.c).to(device)
-    opt = th.optim.Adam(
-        list(encoder.parameters()) + list(decoder.parameters()) + list(corem.parameters()), lr=args.train_lr,
-    )
+    all_params = list(encoder.parameters()) + list(decoder.parameters()) + list(corem.parameters())
+    opt = th.optim.Adam(all_params, lr=args.train_lr)
 
     hmatrices = {g: float_tensor(m) for g, m in hmatrices_np.items()}
     th_means = float_tensor(train_means)
@@ -232,9 +236,11 @@ def run_one_seed(args, name, data_obj, hmatrices_np, levels_by_hierarchy, cfg, s
             loss.backward()
             losses.append(loss.detach().cpu().item())
             if (count + 1) % args.batch_size == 0:
+                th.nn.utils.clip_grad_norm_(all_params, max_norm=5.0)
                 opt.step()
                 opt.zero_grad()
         if len(train_idx) % args.batch_size != 0:
+            th.nn.utils.clip_grad_norm_(all_params, max_norm=5.0)
             opt.step()
         return float(np.mean(losses)) if losses else float("nan")
 
