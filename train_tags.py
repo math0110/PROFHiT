@@ -161,6 +161,7 @@ def pre_validate():
     return float(np.mean(losses))
 
 
+t0 = time.time()
 print("Pretraining...")
 for ep in tqdm(range(PRE_TRAIN_EPOCHS)):
     loss = pretrain_epoch()
@@ -272,7 +273,6 @@ def sample_forecast():
     return curr_data[:, -AHEAD:]
 
 
-t0 = time.time()
 with th.no_grad():
     preds = np.array([sample_forecast() for _ in tqdm(range(EVAL_SAMPLES))])
 preds = preds * train_std[:, None] + train_means[:, None]
