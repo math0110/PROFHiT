@@ -2,18 +2,13 @@
 Adapter for the zaai-ai/hierarchical_time_series_datasets HF datasets
 (prison, tourism, police, m5).
 
-Those datasets only ship leaf-level series plus, per grouping variable, a
-category assignment for each leaf series -- a *crossed/grouped* hierarchy
-(e.g. prison's leaves are crossed by state x gender x legal status), not a
-single nested tree like PROFHiT's own data/*/data.csv files. There is no
-aggregation matrix and no internal-node values provided; both are derived
-here.
-
-Each grouping variable is materialized as its own flat, single-level
-hierarchy off "Total" (Total -> categories(g) -> leaves), generalizing the
-two-hierarchy hmatrix1/hmatrix2 pattern already used for Tourism-L in
-train_tourism.py to G independent hierarchies sharing the same node/data
-array.
+These only ship leaf-level series plus, per grouping variable, a category
+assignment for each leaf -- a crossed/grouped hierarchy (e.g. prison's
+leaves are crossed by state x gender x legal status), not a nested tree.
+No aggregation matrix or internal-node values are provided; both are
+derived here. Each grouping variable becomes its own flat hierarchy off
+"Total", generalizing train_tourism.py's hmatrix1/hmatrix2 pattern to G
+independent hierarchies sharing the same node/data array.
 """
 import pickle
 
