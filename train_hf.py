@@ -20,6 +20,7 @@ from metrics import (
     crps_gaussian,
     distributional_consistency_error,
     log_score,
+    mae as mae_metric,
     mape as mape_metric,
     rmse as rmse_metric,
     wape as wape_metric,
@@ -242,6 +243,7 @@ std_preds = np.std(preds, axis=0)  # (N, ahead), fitted Gaussian std per node/st
 ground_truth = data_obj.ground_truth_horizon  # (N, ahead)
 
 rmse = rmse_metric(ground_truth, mean_preds)
+mae = mae_metric(ground_truth, mean_preds)
 mape = mape_metric(ground_truth, mean_preds)
 wape = wape_metric(ground_truth, mean_preds)
 crps = crps_gaussian(ground_truth, mean_preds, std_preds)
@@ -257,7 +259,7 @@ dce_overall, dce_per_group = distributional_consistency_error(
 elapsed_sec = time.time() - t0
 
 print(
-    f"[{DATASET}] RMSE={rmse:.4f} MAPE={mape:.4f} WAPE={wape:.4f} CRPS={crps:.4f} "
+    f"[{DATASET}] RMSE={rmse:.4f} MAE={mae:.4f} MAPE={mape:.4f} WAPE={wape:.4f} CRPS={crps:.4f} "
     f"LS={ls:.4f} CS={cs:.4f} DCE={dce_overall:.4f} ({elapsed_sec:.1f}s eval)"
 )
 
@@ -274,6 +276,7 @@ with open(out_path, "w") as f:
             "num_nodes": NUM_NODES,
             "backup_time": BACKUP_TIME,
             "rmse": rmse,
+            "mae": mae,
             "mape": mape,
             "wape": wape,
             "crps": crps,

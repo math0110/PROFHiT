@@ -40,6 +40,13 @@ def rmse(y_true, y_pred):
     return float(np.sqrt(np.mean((y_true - y_pred) ** 2)))
 
 
+def mae(y_true, y_pred):
+    # mean(|y_true - y_pred|) -- same cross-dataset scale caveat as RMSE
+    y_true = np.asarray(y_true, dtype=np.float64)
+    y_pred = np.asarray(y_pred, dtype=np.float64)
+    return float(np.mean(np.abs(y_true - y_pred)))
+
+
 def crps_gaussian(y_true, mu, sigma, eps=1e-6):
     # closed-form CRPS for a fitted Gaussian(mu, sigma), matching the
     # paper's evaluation protocol
@@ -148,6 +155,7 @@ def compute_all_metrics(y_true, mu, sigma, node_scale=None):
     # subset, so it's computed separately over all nodes, not per level.
     return {
         "rmse": rmse(y_true, mu),
+        "mae": mae(y_true, mu),
         "mape": mape(y_true, mu),
         "wape": wape(y_true, mu),
         "crps": crps_gaussian(y_true, mu, sigma),
