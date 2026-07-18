@@ -18,7 +18,7 @@ from tqdm import tqdm
 from hierarchy_data import TourismHierarchyData
 from hierarchy_data.agg_matrix import AggMatrixHierarchyData
 from hierarchy_data.levels import compute_levels
-from metrics import distributional_consistency_error, per_level_metrics
+from metrics import compute_all_metrics, distributional_consistency_error, per_level_metrics
 from models.fnpmodels import Corem, EmbedMetaAttenSeq, RegressionSepFNP
 from models.utils import float_tensor, long_tensor
 
@@ -36,6 +36,7 @@ LAMBDA = 0.1
 C = 5.0
 FRAC_VAL = 0.1
 OUT_DIR = "results"
+OVERALL_ONLY = DATASET == "m5"  # m5 has 6 levels, more than any other dataset here -- skip the per-level breakdown for it
 
 # (ahead/horizon, seasonality) per dataset -- labour/tourismlarge/wiki2
 # match the paper's own Table 2 tau column; m5's horizon is the 28-day
@@ -286,10 +287,17 @@ ground_truth = data_obj.data[:, TRAIN_UPTO : TRAIN_UPTO + AHEAD]
 by_hierarchy = {}
 for hier_name, levels in levels_by_hierarchy.items():
     idxs = np.array(sorted(levels.keys()))
-    level_arr = np.array([levels[i] for i in idxs])
-    by_hierarchy[hier_name] = per_level_metrics(
-        ground_truth[idxs], mean_preds[idxs], std_preds[idxs], level_arr, node_scale=train_std[idxs, None],
-    )
+    if OVERALL_ONLY:
+        by_hierarchy[hier_name] = {
+            "overall": compute_all_metrics(
+                ground_truth[idxs], mean_preds[idxs], std_preds[idxs], train_std[idxs, None]
+            )
+        }
+    else:
+        level_arr = np.array([levels[i] for i in idxs])
+        by_hierarchy[hier_name] = per_level_metrics(
+            ground_truth[idxs], mean_preds[idxs], std_preds[idxs], level_arr, node_scale=train_std[idxs, None],
+        )
 
 dce_overall, dce_per_hierarchy = distributional_consistency_error(
     mean_preds.mean(axis=1), std_preds.mean(axis=1), hmatrices_np
