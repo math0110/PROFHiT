@@ -1,6 +1,6 @@
 """
 Train PROFHiT on the paper's own bundled datasets: labour, tourismsmall,
-traffic, wiki2, m5 (via the generic hierarchy_data/tags_csv.py loader), and
+traffic, wiki2, m5 (via the generic hierarchy_data/agg_matrix.py loader), and
 tourismlarge (via the existing TourismHierarchyData, which already handles
 its crossed geography x purpose structure with two hierarchies).
 
@@ -26,7 +26,8 @@ import torch as th
 from tqdm import tqdm
 
 from hierarchy_data import TourismHierarchyData
-from hierarchy_data.tags_csv import TagsCSVHierarchyData, compute_levels
+from hierarchy_data.agg_matrix import AggMatrixHierarchyData
+from hierarchy_data.levels import compute_levels
 from metrics import distributional_consistency_error, per_level_metrics
 from models.fnpmodels import Corem, EmbedMetaAttenSeq, RegressionSepFNP
 from models.utils import float_tensor, long_tensor
@@ -94,7 +95,7 @@ def load_dataset(name):
 
         return data_obj, gen_hmatrices, {"geography": levels1, "purpose": levels2}, cfg
     else:
-        data_obj = TagsCSVHierarchyData(f"data/{name}")
+        data_obj = AggMatrixHierarchyData(f"data/{name}")
         levels = data_obj.levels()
         return data_obj, lambda: {"tree": data_obj.generate_hmatrix()}, {"tree": levels}, cfg
 

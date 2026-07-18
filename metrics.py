@@ -187,7 +187,7 @@ def distributional_consistency_error(mu, sigma, hmatrices, eps=1e-6):
         is_leaf_or_inert = (np.diag(m) == 1) & (row_sum == 1)
         # a node can also be entirely absent from a *partial* hierarchy
         # (tourismlarge's geography/purpose hierarchies each cover only a
-        # subset of nodes -- see hierarchy_data/tags_csv.py's compute_levels
+        # subset of nodes -- see hierarchy_data/levels.py's compute_levels
         # docstring), giving an all-zero row rather than a self-identity
         # one. Without excluding these too, agg_var gets clipped to the eps
         # floor and the JSD ratio explodes -- this is what caused

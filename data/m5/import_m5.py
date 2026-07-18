@@ -66,32 +66,37 @@ def main():
 
     node_values = {}
     node_names_in_order = []
+    node_leaf_members = {}  # node_name -> set of leaf column names it aggregates
 
-    def add_node(name, vec):
+    def add_node(name, vec, leaf_col):
         if name not in node_values:
             node_values[name] = vec.copy()
             node_names_in_order.append(name)
+            node_leaf_members[name] = set()
         else:
             node_values[name] += vec
+        node_leaf_members[name].add(leaf_col)
 
-    leaf_paths = []  # tags.csv rows, one per leaf
+    leaf_paths = []  # tags.csv rows, one per leaf (kept for reference/debugging)
+    leaf_cols_in_order = []
     for i in range(n_leaves):
         row = df.iloc[i]
         state, store, cat, dept, item = (
             row["state_id"], row["store_id"], row["cat_id"], row["dept_id"], row["item_id"],
         )
         vec = values[i]
-
-        add_node("Total", vec)
-        add_node(state, vec)
-        store_col = f"{state}-{store}"
-        add_node(store_col, vec)
-        cat_col = f"{state}-{store}-{cat}"
-        add_node(cat_col, vec)
-        dept_col = f"{state}-{store}-{cat}-{dept}"
-        add_node(dept_col, vec)
         leaf_col = f"{state}-{store}-{cat}-{dept}-{item}"
-        add_node(leaf_col, vec)
+        leaf_cols_in_order.append(leaf_col)
+
+        add_node("Total", vec, leaf_col)
+        add_node(state, vec, leaf_col)
+        store_col = f"{state}-{store}"
+        add_node(store_col, vec, leaf_col)
+        cat_col = f"{state}-{store}-{cat}"
+        add_node(cat_col, vec, leaf_col)
+        dept_col = f"{state}-{store}-{cat}-{dept}"
+        add_node(dept_col, vec, leaf_col)
+        add_node(leaf_col, vec, leaf_col)
 
         leaf_paths.append(
             ["T", f"T-{state}", f"T-{store_col}", f"T-{cat_col}", f"T-{dept_col}", f"T-{leaf_col}"]
@@ -101,13 +106,28 @@ def main():
     out_df = pd.DataFrame({name: node_values[name] for name in node_names_in_order}, index=dates)
     out_df.index.name = ""
 
+    # agg_mat.csv: one row per node, one column per leaf, 1 if that leaf
+    # contributes to that node's total -- same convention as the other
+    # datasets in this repo (labour/tourismsmall/traffic/wiki2), which is
+    # what hierarchy_data/agg_matrix.py's loader reads directly.
+    agg_df = pd.DataFrame(
+        0,
+        index=node_names_in_order,
+        columns=leaf_cols_in_order,
+        dtype=int,
+    )
+    for name, members in node_leaf_members.items():
+        agg_df.loc[name, list(members)] = 1
+
     out_dir = args.out_dir
     out_df.to_csv(f"{out_dir}/data.csv")
+    agg_df.to_csv(f"{out_dir}/agg_mat.csv")
     with open(f"{out_dir}/tags.csv", "w") as f:
         for path in leaf_paths:
             f.write(",".join(path) + "\n")
 
     print(f"Wrote {out_dir}/data.csv ({out_df.shape[0]} rows x {out_df.shape[1]} node columns)")
+    print(f"Wrote {out_dir}/agg_mat.csv ({agg_df.shape[0]} rows x {agg_df.shape[1]} leaf columns)")
     print(f"Wrote {out_dir}/tags.csv ({len(leaf_paths)} leaf rows)")
 
 
