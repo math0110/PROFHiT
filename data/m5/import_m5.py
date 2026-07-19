@@ -6,10 +6,12 @@ learned output layer per node and runs its attention encoder over every
 node on every training step).
 
 Subsamples to a manageable size in two dimensions:
-  - Nodes: keeps all 3 states, all 10 stores, all 3 categories and 7
-    departments (every store carries every department in M5), but samples
-    a small, department-stratified subset of items (default 6 per
-    department, ~42 items x 10 stores = ~420 leaves) rather than all 3,049.
+  - Nodes: keeps the `TOP_N_SERIES` bottom-level (item x store) series with
+    the highest total sales over the history window, out of all 30,490 --
+    not a stratified sample, so category/department representation isn't
+    guaranteed even (a top-seller-heavy department can dominate the sample).
+    Ranked using only the history window, not the horizon, so the selection
+    itself doesn't leak information about the period being forecast.
   - Time: keeps only the most recent `HISTORY_DAYS` + `HORIZON` days rather
     than the full ~5.3 years, since M5's daily cadence would otherwise give
     far more training examples per epoch than any other dataset in this
@@ -19,7 +21,7 @@ Hierarchy nesting chosen: Total -> State -> Store -> Category -> Department
 -> Item. Output format matches the sibling data/{labour,traffic,wiki2,...}
 folders exactly (data.csv: one column per node, real values at every level;
 tags.csv: one row per leaf, comma-separated cumulative ancestor path) so it
-loads via the same generic hierarchy_data/tags_csv.py loader.
+loads via the same generic hierarchy_data/agg_matrix.py loader.
 
 Usage:
     python data/m5/import_m5.py --raw-csv /path/to/sales_train_evaluation.csv
@@ -31,8 +33,7 @@ import pandas as pd
 
 HISTORY_DAYS = 300
 HORIZON = 28
-ITEMS_PER_DEPT = 6
-SEED = 42
+TOP_N_SERIES = 1000
 
 
 def main():
@@ -45,20 +46,17 @@ def main():
     day_cols = [c for c in raw.columns if c.startswith("d_")]
     assert len(day_cols) >= HISTORY_DAYS + HORIZON, "not enough days in raw file"
     keep_days = day_cols[-(HISTORY_DAYS + HORIZON):]
+    history_cols = keep_days[:HISTORY_DAYS]
 
-    rng = np.random.default_rng(SEED)
-    sampled_items = []
-    for dept, grp in raw.groupby("dept_id"):
-        items = sorted(grp["item_id"].unique())
-        n = min(ITEMS_PER_DEPT, len(items))
-        sampled_items.extend(rng.choice(items, size=n, replace=False).tolist())
-    sampled_items = sorted(set(sampled_items))
-
-    df = raw[raw["item_id"].isin(sampled_items)].copy()
-    df = df[["item_id", "dept_id", "cat_id", "store_id", "state_id"] + keep_days]
+    total_sales = raw[history_cols].sum(axis=1)
+    top_idx = total_sales.nlargest(TOP_N_SERIES).index
+    df = raw.loc[top_idx, ["item_id", "dept_id", "cat_id", "store_id", "state_id"] + keep_days].copy()
+    df = df.reset_index(drop=True)
 
     n_leaves = len(df)
-    print(f"Sampled {len(sampled_items)} items x {df['store_id'].nunique()} stores = {n_leaves} leaf series")
+    print(f"Sampled top {n_leaves} bottom-level series by history-window sales (out of {len(raw)})")
+    print(f"  covering {df['item_id'].nunique()} unique items across {df['store_id'].nunique()} stores")
+    print(f"  department counts: {df['dept_id'].value_counts().to_dict()}")
     print(f"Using {HISTORY_DAYS} history days + {HORIZON} horizon days = {len(keep_days)} total timesteps")
 
     values = df[keep_days].to_numpy(dtype=np.float64)  # (n_leaves, T)
