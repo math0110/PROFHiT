@@ -49,7 +49,7 @@ DATASET_CONFIG = {
     "traffic": dict(ahead=7, seasonality=7),
     "wiki2": dict(ahead=1, seasonality=7),
     "m5": dict(ahead=28, seasonality=7),
-    "tourismlarge": dict(ahead=12, seasonality=4),
+    "tourismlarge": dict(ahead=12, seasonality=12),  # monthly data (confirmed via date index), not quarterly
 }
 
 np.random.seed(SEED)
